@@ -7,6 +7,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -116,6 +117,17 @@ bool ChildProcess::start(const Options &opt, std::string *error)
 
     if (pid == 0) {
         // ----- çocuk -----
+        // Kendi süreç grubu: terminalin Ctrl+C'si buraya ulaşmaz.
+        setpgid(0, 0);
+
+        // Sinyal işleyicilerini ve maskeyi varsayılana döndür; aksi hâlde
+        // supervisor'ın bloke ettiği sinyaller uygulamaya miras kalır.
+        sigset_t empty;
+        sigemptyset(&empty);
+        sigprocmask(SIG_SETMASK, &empty, nullptr);
+        for (int sig : { SIGTERM, SIGINT, SIGHUP, SIGCHLD, SIGUSR1, SIGPIPE })
+            signal(sig, SIG_DFL);
+
         // stdin: /dev/null. stdout+stderr: pipe (dup2 O_CLOEXEC'i temizler).
         const int devnull = open("/dev/null", O_RDONLY);
         if (devnull >= 0) {
@@ -152,6 +164,10 @@ bool ChildProcess::start(const Options &opt, std::string *error)
     const int flags = fcntl(outFd_, F_GETFL, 0);
     if (flags >= 0)
         fcntl(outFd_, F_SETFL, flags | O_NONBLOCK);
+
+    // Yarış durumu: çocuk kendi setpgid'ini yapmadan önce sinyal göndermemiz
+    // gerekebilir. Burada da ayarlayarak iki tarafın da kazanmasını sağlıyoruz.
+    setpgid(pid, pid);
 
     if (!opt.logChildOutput)
         closeOutput();
@@ -210,6 +226,15 @@ bool ChildProcess::drainOutput()
         closeOutput();
         return false;
     }
+}
+
+void ChildProcess::sendSignal(int sig)
+{
+    if (pid_ <= 0)
+        return;
+    // Süreç grubuna gönder: uygulama alt süreç açtıysa onlar da kapanır.
+    if (kill(-pid_, sig) != 0 && errno == ESRCH)
+        kill(pid_, sig);
 }
 
 ExitStatus ChildProcess::reap()

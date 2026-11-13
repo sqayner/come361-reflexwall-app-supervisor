@@ -20,13 +20,14 @@ Gözetmenin, gözettiği uygulamadan daha az şeye bağlı olması kasıtlıdır
 - Uygulamayı eski `reflexwall.service` dosyasındaki ortam değişkenleriyle
   başlatır: `QT_QPA_PLATFORM=eglfs`, `QT_IM_MODULE=qtvirtualkeyboard`,
   `LANG=tr_TR.UTF-8`.
-- Uygulamanın `stdout`/`stderr` çıktısını bir pipe üzerinden okuyup kendi
-  loguna `app |` etiketiyle, zaman damgalı olarak aktarır. Tek bir log akışında
-  hem gözetmenin (`sup |`) hem uygulamanın satırları görünür.
-- Uygulama bir sinyalle ölürse (çökme) veya kendi kapanırsa
-  `--restart-delay` (varsayılan 3 sn) sonra yeniden başlatır.
-- Tüm ayarlar komut satırından verilebilir; parametresiz çalıştırıldığında eski
-  servis dosyasının yaptığını birebir yapar.
+- Uygulamanın `stdout`/`stderr` çıktısını kendi loguna `app |` etiketiyle,
+  zaman damgalı olarak aktarır. Tek bir log akışında hem gözetmenin hem
+  uygulamanın satırları görünür.
+- Uygulama bir sinyalle ölürse (çökme) veya kendi kapanırsa yeniden başlatır.
+  Varsayılan bekleme 3 sn; uygulama üst üste açılışta çöküyorsa bekleme
+  katlanarak 30 sn'ye kadar çıkar, uygulama bir süre ayakta kalınca sıfırlanır.
+- `SIGTERM`/`SIGINT` alınca uygulamayı önce `SIGTERM` ile düzgünce durdurur,
+  5 sn içinde kapanmazsa `SIGKILL` gönderir.
 
 ## Logu canlı izleme
 
@@ -62,6 +63,16 @@ reflexwall-supervisor --log-file /var/log/reflexwall.log
 2026-11-13 08:05:34.356 [INFO ] sup | uygulama çalışıyor (pid 455) [yeniden başlatma]
 ```
 
+## Sinyaller
+
+| Sinyal | Etki |
+|---|---|
+| `SIGTERM`, `SIGINT` | Uygulamayı durdurup temiz çık |
+| `SIGHUP` | Uygulamayı hemen yeniden başlat (bekleme yok) |
+| `SIGUSR1` | Çalışma istatistiklerini logla |
+
+Örnek: arayüzü yeniden başlatmak için `systemctl kill -s HUP reflexwall-supervisor`
+
 ## Seçenekler
 
 Tümü için `reflexwall-supervisor --help`. Sık kullanılanlar:
@@ -71,6 +82,8 @@ Tümü için `reflexwall-supervisor --help`. Sık kullanılanlar:
 | `--exec <yol>` | `/usr/bin/appreflexwallApp` | Çalıştırılacak uygulama |
 | `--env KEY=VALUE` | – | Uygulamanın ortamına ekler/değiştirir |
 | `--restart-delay <sn>` | 3 | İki deneme arası bekleme |
+| `--max-backoff <sn>` | 30 | Katlanan beklemenin üst sınırı |
+| `--startup-grace <sn>` | 10 | Bu süreden önce ölen süreç "açılışta çöktü" sayılır |
 | `--max-restarts <n>` | 0 (sınırsız) | Yeniden başlatma sınırı |
 | `--once` | – | Hiç yeniden başlatma (test için) |
 | `--log-level <seviye>` | info | `debug｜info｜warn｜error` |
@@ -84,17 +97,13 @@ pkill -SEGV appreflexwallApp
 journalctl -fu reflexwall-supervisor
 ```
 
-## Henüz yok
+## IPC / heartbeat (henüz yok)
 
-- **Sinyal işleme.** Supervisor `SIGTERM`/`SIGINT` alınca varsayılan davranışla
-  hemen ölüyor; uygulama düzgünce durdurulmuyor. systemd altında cgroup
-  temizliği uygulamayı da öldürdüğü için pratikte sorun çıkmıyor, ama elle
-  çalıştırırken uygulama sahipsiz kalabilir. Ayrıca `SIGHUP` ile elle yeniden
-  başlatma ve `SIGUSR1` ile durum loglama düşünülüyor.
-- **Yeniden başlatma beklemesi sabit.** Uygulama açılışta üst üste çöküyorsa
-  her 3 sn'de bir denemek yerine beklemenin katlanarak artması (backoff) lazım.
-- **Durdurma zaman aşımı.** `SIGTERM`'e yanıt vermeyen uygulamanın bir süre
-  sonra `SIGKILL` ile bitirilmesi.
+Uygulamanın "yaşıyorum" mesajı göndereceği kanal bu sürümde **yok**. Eklenince
+yeri `Supervisor::waitForChildExit()` döngüsüdür: oraya "son heartbeat'ten beri
+X saniye geçti" kontrolü konup, takılan (donmuş ama ölmemiş) uygulama
+`stopChild()` ile öldürülebilir. Döngü zaten her 250 ms'de bir uyanıyor, ek bir
+zamanlayıcı gerekmez.
 
 ## Derleme
 
@@ -108,5 +117,5 @@ Geliştirme makinesinde:
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
-./build/reflexwall-supervisor --exec /bin/echo --arg merhaba --once
+./build/reflexwall-supervisor --exec /bin/echo --once
 ```

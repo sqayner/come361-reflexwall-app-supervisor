@@ -22,9 +22,14 @@ struct Options {
 
     // Yeniden başlatma politikası.
     double restartDelay = 3.0;   // eski servisteki RestartSec=3
+    double maxBackoff = 30.0;    // üst üste çöküşlerde bekleme buraya kadar büyür
+    double startupGrace = 10.0;  // bu süreden önce ölen süreç "açılışta çöktü" sayılır
     int maxRestarts = 0;         // 0 = sınırsız
     bool restartOnCleanExit = true; // eski servisteki Restart=always
     bool once = false;           // yeniden başlatma yok: tek sefer çalıştır (test için)
+
+    // Durdurma: SIGTERM'den sonra bu kadar saniye beklenir, sonra SIGKILL.
+    double stopTimeout = 5.0;
 
     // Loglama.
     std::string logFile;

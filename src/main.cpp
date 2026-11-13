@@ -20,7 +20,7 @@
 #include <unistd.h>
 
 #ifndef RW_SUPERVISOR_VERSION
-#define RW_SUPERVISOR_VERSION "0.2"
+#define RW_SUPERVISOR_VERSION "1.0"
 #endif
 
 int main(int argc, char **argv)
