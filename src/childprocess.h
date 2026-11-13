@@ -30,6 +30,9 @@ struct ExitStatus {
 // okuyup kendi loguna "app |" etiketiyle satır satır aktarır. Böylece tek bir
 // `journalctl -f` veya tek bir terminal hem supervisor'ın hem uygulamanın
 // çıktısını zaman damgalı olarak gösterir.
+//
+// Çocuk kendi süreç grubuna alınır (setpgid): terminalden gelen Ctrl+C yalnızca
+// supervisor'a ulaşır, uygulamayı durdurma kararını her zaman supervisor verir.
 class ChildProcess {
 public:
     ChildProcess() = default;
@@ -49,6 +52,9 @@ public:
     // Pipe'ta hazır olan veriyi okur ve tam satırları loglar.
     // Pipe kapandığında (EOF) false döner.
     bool drainOutput();
+
+    // Süreç grubuna sinyal gönderir.
+    void sendSignal(int sig);
 
     // Çocuk öldüyse durumunu toplar (WNOHANG). Hâlâ çalışıyorsa Kind::Running
     // döner. Toplandıktan sonra running() false olur.

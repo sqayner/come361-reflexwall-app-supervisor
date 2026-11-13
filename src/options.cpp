@@ -85,6 +85,15 @@ bool parseOptions(int argc, char **argv, Options *out, std::string *error)
         } else if (a == "--restart-delay") {
             if (!needValue(argc, argv, i, "--restart-delay", error)) return false;
             if (!parseDouble(argv[++i], &out->restartDelay, "--restart-delay", error)) return false;
+        } else if (a == "--max-backoff") {
+            if (!needValue(argc, argv, i, "--max-backoff", error)) return false;
+            if (!parseDouble(argv[++i], &out->maxBackoff, "--max-backoff", error)) return false;
+        } else if (a == "--startup-grace") {
+            if (!needValue(argc, argv, i, "--startup-grace", error)) return false;
+            if (!parseDouble(argv[++i], &out->startupGrace, "--startup-grace", error)) return false;
+        } else if (a == "--stop-timeout") {
+            if (!needValue(argc, argv, i, "--stop-timeout", error)) return false;
+            if (!parseDouble(argv[++i], &out->stopTimeout, "--stop-timeout", error)) return false;
         } else if (a == "--max-restarts") {
             if (!needValue(argc, argv, i, "--max-restarts", error)) return false;
             if (!parseInt(argv[++i], &out->maxRestarts, "--max-restarts", error)) return false;
@@ -115,6 +124,9 @@ bool parseOptions(int argc, char **argv, Options *out, std::string *error)
         }
     }
 
+    if (out->maxBackoff < out->restartDelay)
+        out->maxBackoff = out->restartDelay;
+
     return true;
 }
 
@@ -137,9 +149,13 @@ void printUsage(FILE *out, const char *argv0)
 "\n"
 "Yeniden başlatma:\n"
 "  --restart-delay <sn>      İki deneme arası bekleme (varsayılan: 3)\n"
+"  --max-backoff <sn>        Üst üste çöküşlerde beklemenin üst sınırı (30)\n"
+"  --startup-grace <sn>      Bu süreden önce ölen süreç 'açılışta çöktü' sayılır\n"
+"                            ve bekleme süresi katlanarak artar (10)\n"
 "  --max-restarts <n>        En fazla bu kadar yeniden başlatma; 0 = sınırsız (0)\n"
 "  --no-restart-on-clean-exit  Uygulama 0 ile çıkarsa yeniden başlatmaz\n"
 "  --once                    Hiç yeniden başlatmaz, tek sefer çalıştırır (test)\n"
+"  --stop-timeout <sn>       SIGTERM'den sonra SIGKILL'e kadar beklenen süre (5)\n"
 "\n"
 "Loglama:\n"
 "  --log-level <seviye>      debug|info|warn|error (varsayılan: info)\n"
@@ -148,6 +164,11 @@ void printUsage(FILE *out, const char *argv0)
 "\n"
 "  -h, --help                Bu yardımı yazdırır\n"
 "  -V, --version             Sürümü yazdırır\n"
+"\n"
+"Sinyaller:\n"
+"  SIGTERM/SIGINT            Uygulamayı durdurup temiz çıkar\n"
+"  SIGHUP                    Uygulamayı hemen yeniden başlatır\n"
+"  SIGUSR1                   Çalışma istatistiklerini loglar\n"
 "\n"
 "Örnek (canlı log ile elle çalıştırma):\n"
 "  %s --log-level debug\n"
