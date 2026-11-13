@@ -1,0 +1,26 @@
+cmake_minimum_required(VERSION 3.16)
+
+project(reflexwall-supervisor VERSION 0.1 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Qt'ye veya başka bir kütüphaneye bağımlı değil: yalnızca POSIX. Gözetmen
+# sürecin kendisi, gözettiği uygulamadan daha az şeye bağlı olmalı.
+add_executable(reflexwall-supervisor
+    src/main.cpp
+    src/logger.cpp
+    src/childprocess.cpp
+)
+
+target_compile_definitions(reflexwall-supervisor PRIVATE
+    _GNU_SOURCE
+)
+
+target_compile_options(reflexwall-supervisor PRIVATE
+    -Wall -Wextra -Wpedantic
+)
+
+include(GNUInstallDirs)
+install(TARGETS reflexwall-supervisor RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
