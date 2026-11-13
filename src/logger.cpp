@@ -1,11 +1,22 @@
 #include "logger.h"
 
 #include <cstdarg>
+#include <cstring>
 #include <ctime>
 
+#include <errno.h>
 #include <time.h>
 
 namespace rw {
+
+bool parseLogLevel(const std::string &name, LogLevel *out)
+{
+    if (name == "debug") { *out = LogLevel::Debug; return true; }
+    if (name == "info")  { *out = LogLevel::Info;  return true; }
+    if (name == "warn")  { *out = LogLevel::Warn;  return true; }
+    if (name == "error") { *out = LogLevel::Error; return true; }
+    return false;
+}
 
 const char *logLevelName(LogLevel lvl)
 {
@@ -24,7 +35,27 @@ Logger &Logger::instance()
     return logger;
 }
 
-void Logger::write(LogLevel lvl, const char *text)
+Logger::~Logger()
+{
+    if (file_)
+        fclose(file_);
+}
+
+bool Logger::openFile(const std::string &path, std::string *error)
+{
+    FILE *f = fopen(path.c_str(), "ae"); // append + O_CLOEXEC
+    if (!f) {
+        if (error)
+            *error = path + ": " + strerror(errno);
+        return false;
+    }
+    if (file_)
+        fclose(file_);
+    file_ = f;
+    return true;
+}
+
+void Logger::write(LogLevel lvl, const char *tag, const char *text)
 {
     if (!enabled(lvl))
         return;
@@ -38,11 +69,16 @@ void Logger::write(LogLevel lvl, const char *text)
     const size_t n = strftime(stamp, sizeof stamp, "%Y-%m-%d %H:%M:%S", &tmv);
     snprintf(stamp + n, sizeof stamp - n, ".%03ld", ts.tv_nsec / 1000000);
 
-    fprintf(stdout, "%s [%s] %s\n", stamp, logLevelName(lvl), text);
+    fprintf(stdout, "%s [%s] %-3s | %s\n", stamp, logLevelName(lvl), tag, text);
     fflush(stdout);
+
+    if (file_) {
+        fprintf(file_, "%s [%s] %-3s | %s\n", stamp, logLevelName(lvl), tag, text);
+        fflush(file_);
+    }
 }
 
-void logf(LogLevel lvl, const char *fmt, ...)
+void logf(LogLevel lvl, const char *tag, const char *fmt, ...)
 {
     Logger &logger = Logger::instance();
     if (!logger.enabled(lvl))
@@ -54,7 +90,7 @@ void logf(LogLevel lvl, const char *fmt, ...)
     vsnprintf(buf, sizeof buf, fmt, ap);
     va_end(ap);
 
-    logger.write(lvl, buf);
+    logger.write(lvl, tag, buf);
 }
 
 } // namespace rw

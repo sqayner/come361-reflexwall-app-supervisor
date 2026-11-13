@@ -7,6 +7,8 @@
 
 namespace rw {
 
+struct Options;
+
 // Çocuk sürecin nasıl sonlandığı.
 struct ExitStatus {
     enum class Kind { Running, Exited, Signalled };
@@ -24,30 +26,40 @@ struct ExitStatus {
 
 // Gözetilen uygulamayı fork+exec ile başlatır.
 //
-// Bu sürümde uygulamanın stdout/stderr'i supervisor'ınkinden miras alınır:
-// uygulamanın satırları aynı terminale veya journal'a doğrudan düşer, ancak
-// zaman damgası almaz ve supervisor'ın satırlarından ayırt edilemez.
+// Uygulamanın stdout ve stderr'i bir pipe'a yönlendirilir; supervisor bunu
+// okuyup kendi loguna "app |" etiketiyle satır satır aktarır. Böylece tek bir
+// `journalctl -f` veya tek bir terminal hem supervisor'ın hem uygulamanın
+// çıktısını zaman damgalı olarak gösterir.
 class ChildProcess {
 public:
     ChildProcess() = default;
+    ~ChildProcess();
 
     ChildProcess(const ChildProcess &) = delete;
     ChildProcess &operator=(const ChildProcess &) = delete;
 
-    // execPath'i, üst sürecin ortamına env'deki KEY=VALUE çiftleri eklenmiş
-    // olarak başlatır.
-    bool start(const std::string &execPath, const std::vector<std::string> &env,
-               std::string *error);
+    bool start(const Options &opt, std::string *error);
 
     bool running() const { return pid_ > 0; }
     pid_t pid() const { return pid_; }
 
-    // Çocuk sonlanana kadar bekler (bloklar) ve nasıl sonlandığını döner.
-    // Döndükten sonra running() false olur.
-    ExitStatus wait();
+    // Çocuğun çıktı pipe'ının okuma ucu; kapanmışsa -1.
+    int outputFd() const { return outFd_; }
+
+    // Pipe'ta hazır olan veriyi okur ve tam satırları loglar.
+    // Pipe kapandığında (EOF) false döner.
+    bool drainOutput();
+
+    // Çocuk öldüyse durumunu toplar (WNOHANG). Hâlâ çalışıyorsa Kind::Running
+    // döner. Toplandıktan sonra running() false olur.
+    ExitStatus reap();
 
 private:
+    void closeOutput();
+
     pid_t pid_ = -1;
+    int outFd_ = -1;
+    std::string pending_; // pipe'tan gelen yarım satır
 };
 
 } // namespace rw
